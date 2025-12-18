@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Include jsPDF library for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Include SheetJS library for reading spreadsheet files -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+    <title>PLC Generatot</title>
+    <style>
+        /* Basic CSS for styling */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 1000px; /* Increased width to better fit table data */
+            width: 90%;
+        }
+
+        .logo {
+            max-width: 150px; /* Adjust the size of your logo */
+            height: auto;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 2em;
+            color: #333;
+            margin-top: 0;
+        }
+
+        p {
+            color: #666;
+        }
+
+        #file-input {
+            display: block;
+            margin: 20px auto;
+        }
+
+        #data-display {
+            margin-top: 20px;
+            text-align: left;
+            overflow-x: auto; /* Add horizontal scroll for wide tables */
+        }
+
+        /* Style for the generated table */
+        #data-display table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        #data-display th, #data-display td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        /* Styles for row selection */
+        .selection-controls {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+
+        .selection-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            width: 22%;
+        }
+
+        .selection-box.selection-required {
+            background-color: #f8d7da; /* Light Red */
+            border-color: #f5c6cb;
+        }
+
+        .selection-box.selection-complete {
+            background-color: #d4edda; /* Light Green */
+            border-color: #c3e6cb;
+        }
+
+        .selection-box h3 {
+            margin-top: 0;
+        }
+
+        #selection-status {
+            margin-top: 15px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        /* Style for clickable rows */
+        #data-display tr.clickable-row:hover {
+            background-color: #f1f1f1;
+            cursor: pointer;
+        }
+
+        /* Style for selected rows */
+        #data-display tr.selected-first, #data-display tr.selected-last {
+            background-color: #d1ecf1 !important; /* A light blue to indicate selection */
+        }
+
+        /* Style for the selected grade column */
+        #data-display .selected-grade-column {
+            background-color: #cce5ff !important; /* A different blue for the entire column */
+        }
+        #data-display td.clickable-cell:hover {
+            background-color: #f1f1f1;
+            cursor: pointer;
+        }
+
+        /* Styles for main action buttons */
+        .action-buttons {
+            margin-top: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .action-buttons button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Your Logo -->
+        <img src="your-logo.png" alt="Company Logo" class="logo">
+
+        <!-- Page Title -->
+        <h1>Welcome to PLC Generatot</h1>
+
+        <!-- File Input and Data Display Area -->
+        <p>Select a spreadsheet file (.xlsx, .xls, .csv) to view its contents.</p>
+
+        <input type="file" id="file-input" accept=".xlsx, .xls, .csv" />
+
+        <!-- Selection Controls and Display -->
+        <div class="selection-controls">
+            <div class="selection-box selection-required">
+                <h3>Page Header</h3>
+                <input type="file" id="header-image-input" accept="image/png" style="margin-top: 5px;">
+                <div id="header-info">Not selected</div>
+            </div>
+            <div class="selection-box selection-required">
+                <h3>Student Grade</h3>
+                <button id="select-grade-btn">Select Column</button>
+                <div id="grade-column-info">Not selected</div>
+            </div>
+            <div class="selection-box selection-required">
+                <h3>First Student</h3>
+                <button id="select-first-btn">Select</button>
+                <div id="first-student-info">Not selected</div>
+            </div>
+            <div class="selection-box selection-required">
+                <h3>Last Student</h3>
+                <button id="select-last-btn">Select</button>
+                <div id="last-student-info">Not selected</div>
+            </div>
+        </div>
+
+        <div id="selection-status"></div>
+
+        <div id="data-display"></div>
+
+        <!-- Main Action Buttons -->
+        <div class="action-buttons">
+            <button id="generate-plc-btn" style="background-color: #28a745; color: white;">Generate PLC</button>
+            <button id="reset-btn" style="background-color: #6c757d; color: white;">Reset Selections</button>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const dataDisplay = document.getElementById('data-display');
+        const selectFirstBtn = document.getElementById('select-first-btn');
+        const selectLastBtn = document.getElementById('select-last-btn');
+        const firstStudentInfo = document.getElementById('first-student-info');
+        const lastStudentInfo = document.getElementById('last-student-info');
+        const selectionStatus = document.getElementById('selection-status');
+        const generatePlcBtn = document.getElementById('generate-plc-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const headerImageInput = document.getElementById('header-image-input');
+        const headerInfo = document.getElementById('header-info');
+        const selectGradeBtn = document.getElementById('select-grade-btn');
+        const gradeColumnInfo = document.getElementById('grade-column-info');
+
+        let selectionMode = null; // Can be 'first', 'last', 'grade', or null
+        let firstStudent = null; // Will store { data, index }
+        let lastStudent = null; // Will store { data, index }
+        let headerImageData = null; // Will store the Base64 data URL of the header image
+        let gradeColumnIndex = null; // Will store the index of the grade column
+        let sheetData = [];
+
+        selectFirstBtn.addEventListener('click', () => {
+            selectionMode = 'first';
+            selectionStatus.textContent = 'Selection Mode: Click a row to select the First Student.';
+        });
+
+        selectLastBtn.addEventListener('click', () => {
+            selectionMode = 'last';
+            selectionStatus.textContent = 'Selection Mode: Click a row to select the Last Student.';
+        });
+
+        selectGradeBtn.addEventListener('click', () => {
+            selectionMode = 'grade';
+            selectionStatus.textContent = 'Selection Mode: Click any cell in the column containing the Student Grade.';
+        });
+
+        headerImageInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                const box = headerImageInput.closest('.selection-box');
+                headerImageData = null;
+                headerInfo.textContent = 'Not selected';
+                box.classList.remove('selection-complete');
+                box.classList.add('selection-required');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const box = headerImageInput.closest('.selection-box');
+                headerImageData = e.target.result; // This is the Base64 string
+                headerInfo.textContent = `Selected: ${file.name}`;
+                box.classList.remove('selection-required');
+                box.classList.add('selection-complete');
+            };
+            reader.readAsDataURL(file);
+        });
+
+        resetBtn.addEventListener('click', resetSelections);
+        generatePlcBtn.addEventListener('click', generatePdf);
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+            resetSelections(); // Reset if a new file is loaded
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    // Convert sheet to array of arrays to have more control
+                    sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    renderTable(sheetData);
+
+                } catch (error) {
+                    console.error("Error processing the file:", error);
+                    dataDisplay.innerHTML = `<p style="color: red;">Could not read the file. Please ensure it is a valid spreadsheet.</p>`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function renderTable(data) {
+            if (!data || data.length === 0) {
+                dataDisplay.innerHTML = "<p>No data to display.</p>";
+                return;
+            }
+
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const tbody = document.createElement('tbody');
+
+            // Create header row
+            const headerRow = document.createElement('tr');
+            data[0].forEach((headerText, index) => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                th.dataset.columnIndex = index; // Store column index
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+
+            // Create data rows
+            for (let i = 1; i < data.length; i++) {
+                const rowData = data[i];
+                const tr = document.createElement('tr');
+                tr.classList.add('clickable-row');
+                tr.dataset.rowIndex = i; // Store original row index
+
+                rowData.forEach(cellData => {
+                    const td = document.createElement('td');
+                    td.classList.add('clickable-cell');
+                    td.textContent = cellData;
+                    tr.appendChild(td);
+                });
+
+                tr.addEventListener('click', handleRowClick);
+                tbody.appendChild(tr);
+            }
+
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            dataDisplay.innerHTML = ''; // Clear previous content
+            dataDisplay.appendChild(table);
+        }
+
+        function handleRowClick(event) {
+            if (!selectionMode) return;
+
+            if (selectionMode === 'grade') {
+                const clickedCell = event.target;
+                if (clickedCell.tagName !== 'TD') return; // Ensure a cell was clicked
+
+                gradeColumnIndex = clickedCell.cellIndex;
+                const headerText = sheetData[0][gradeColumnIndex] || `Column ${gradeColumnIndex + 1}`;
+                gradeColumnInfo.textContent = `Selected: ${headerText}`;
+
+                const box = selectGradeBtn.closest('.selection-box');
+                box.classList.remove('selection-required');
+                box.classList.add('selection-complete');
+
+                // Clear previous column selection
+                document.querySelectorAll('.selected-grade-column').forEach(el => {
+                    el.classList.remove('selected-grade-column');
+                });
+
+                // Highlight the new column
+                document.querySelectorAll(`#data-display tr`).forEach(row => {
+                    const cell = row.children[gradeColumnIndex];
+                    if (cell) {
+                        cell.classList.add('selected-grade-column');
+                    }
+                });
+
+            } else { // Handle 'first' and 'last' student selection
+                const clickedRow = event.currentTarget;
+                const rowIndex = parseInt(clickedRow.dataset.rowIndex, 10);
+                const rowData = sheetData[rowIndex];
+
+                // Clear previous row selection highlight for this mode
+                const prevSelected = dataDisplay.querySelector(`.selected-${selectionMode}`);
+                if (prevSelected) {
+                    prevSelected.classList.remove(`selected-${selectionMode}`);
+                }
+
+                // Apply new selection
+                if (selectionMode === 'first') {
+                    firstStudent = { data: rowData, index: rowIndex };
+                    firstStudentInfo.textContent = `Selected: Row ${rowIndex + 1} (${rowData[0] || ''})`;
+                    clickedRow.classList.add('selected-first');
+                    const box = selectFirstBtn.closest('.selection-box');
+                    box.classList.remove('selection-required');
+                    box.classList.add('selection-complete');
+                } else if (selectionMode === 'last') {
+                    lastStudent = { data: rowData, index: rowIndex };
+                    lastStudentInfo.textContent = `Selected: Row ${rowIndex + 1} (${rowData[0] || ''})`;
+                    clickedRow.classList.add('selected-last');
+                    const box = selectLastBtn.closest('.selection-box');
+                    box.classList.remove('selection-required');
+                    box.classList.add('selection-complete');
+                }
+            }
+
+            // Reset selection mode
+            selectionMode = null;
+            selectionStatus.textContent = '';
+        }
+
+        function resetSelections() {
+            firstStudent = null;
+            lastStudent = null;
+            headerImageData = null;
+            gradeColumnIndex = null;
+
+            firstStudentInfo.textContent = 'Not selected';
+            lastStudentInfo.textContent = 'Not selected';
+            headerInfo.textContent = 'Not selected';
+            gradeColumnInfo.textContent = 'Not selected';
+            headerImageInput.value = null; // Reset the file input
+            selectionStatus.textContent = '';
+            selectionMode = null;
+
+            // Reset selection box colors
+            document.querySelectorAll('.selection-box').forEach(box => {
+                box.classList.remove('selection-complete');
+                box.classList.add('selection-required');
+            });
+
+            // Remove all selection highlight classes from the table
+            const highlightedRows = dataDisplay.querySelectorAll('.selected-first, .selected-last, .selected-grade-column');
+            highlightedRows.forEach(row => {
+                row.classList.remove('selected-first', 'selected-last', 'selected-grade-column');
+            });
+        }
+
+        function generatePdf() {
+            if (!firstStudent || !lastStudent) {
+                alert('Please select both a first and a last student before generating the PDF.');
+                return;
+            }
+
+            // Ensure we have the jsPDF library loaded
+            const { jsPDF } = window.jspdf;
+            if (!jsPDF) {
+                alert('PDF generation library is not loaded. Please check your internet connection and try again.');
+                return;
+            }
+
+            const doc = new jsPDF();
+
+            // Determine the start and end of the loop, regardless of selection order
+            const startIndex = Math.min(firstStudent.index, lastStudent.index);
+            const endIndex = Math.max(firstStudent.index, lastStudent.index);
+
+            let isFirstPage = true;
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (!isFirstPage) {
+                    doc.addPage();
+                }
+
+                const studentData = sheetData[i];
+                const studentName = studentData[0] || 'Unnamed Student'; // Assume name is in the first column
+
+                let yPos = 20; // Starting Y position for text
+
+                // Add the page header if it has been selected
+                if (headerImageData) {
+                    // Add the image. Let's make it 170mm wide and place it near the top.
+                    // jsPDF uses mm as units. A4 is 210mm wide.
+                    const imageWidth = 170;
+                    doc.addImage(headerImageData, 'PNG', 20, 15, imageWidth, 0); // width is set, height is auto-calculated
+                    yPos += 40; // Adjust starting Y position for text below the image
+                }
+
+                // Add the student name
+                doc.setFontSize(22);
+                doc.text(studentName, 20, yPos);
+
+                // Add the grade if a column has been selected
+                if (gradeColumnIndex !== null) {
+                    const grade = studentData[gradeColumnIndex] || 'N/A';
+                    yPos += 10; // Move down from the name
+                    doc.setFontSize(14);
+                    doc.text(`Assessment grade: ${grade}`, 20, yPos);
+                }
+
+                isFirstPage = false;
+            }
+
+            doc.save('PLC_Student_Reports.pdf');
+        }
+    </script>
+</body>
+</html>
